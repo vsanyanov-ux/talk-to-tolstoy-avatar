@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+dist/
+.npm/
+
+# Backend & RAG
+backend/index.json
+backend/logs/
+backend/tracing/
+backend/eval_traces.jsonl
+backend/__pycache__/
+venv/
+.env
+.python-version
+__pycache__/
+*.pyc
+
+# Data & Temp (Large datasets and scratchpads)
+Data/
+tmp/
+.gemini/
+brain/
+artifacts/
+*.log
+
+# System
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
