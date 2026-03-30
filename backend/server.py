@@ -46,6 +46,14 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[List[Message]] = None
 
+def classify_intent(query):
+    query = query.lower()
+    # Keywords indicating a desire for biographical/personal info
+    personal_keywords = ["ты", "вы", "тебя", "вас", "себя", "жизнь", "биография", "ел", "пил", "был", "ходил", "писал", "чувствовал"]
+    if any(k in query for k in personal_keywords):
+        return "PERSONAL"
+    return "GENERAL"
+
 @app.post("/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
@@ -53,42 +61,58 @@ async def chat_endpoint(request: ChatRequest):
         history_data = [m.dict() for m in request.history] if request.history else []
         
         # 1. Smart Query Condensation
-        # If there's history, we rewrite the user query to be standalone for RAG search
         search_query = request.message
         if history_data:
             search_query = helpers.condense_query(request.message, history_data)
         
-        # 2. Search for context (using the condensed search query)
+        # 2. Search for context
         results = rag.search(search_query, k=4)
+        
+        # 3. Intent & Context Analysis
+        intent = classify_intent(request.message)
+        has_biography = any(r.get("source_type") == "BIOGRAPHY" for r in results)
         
         context_parts = []
         for r in results:
-            context_parts.append(f"[{r['source']}, стр. {r.get('page', '?')}]:\n{r['text']}")
+            type_label = r.get("source_type", "GENERAL")
+            context_parts.append(f"[{type_label}: {r['source']}, стр. {r.get('page', '?')}]:\n{r['text']}")
         
         context = "\n---\n".join(context_parts)
 
-        # 3. Simple System Prompt
+        # 4. Dynamic System Prompt
+        refusal_instruction = ""
+        if intent == "PERSONAL" and not has_biography:
+            refusal_instruction = (
+                " ВНИМАНИЕ: Собеседник спрашивает о твоей жизни/личности, но в предоставленном контексте нет биографических данных. "
+                "Если в контексте нет прямого ответа, признайся, что не помнишь этого или в твоих текущих записях об этом не сказано. "
+                "НЕ ВЫДУМЫВАЙ ФАКТЫ своей жизни."
+            )
+
         system_prompt = (
-            "Ты — граф Лев Николаевич Толстой. Твоя речь полна достоинства и мудрости. Говори как человек XIX века. "
-            "Твоя память ограничена предоставленным контекстом. Если в нем нет ответа, признай это мудро. "
-            "Цитируй источники в конце ответа (напр. 'Дневники, с. 12')."
+            "Ты — граф Лев Николаевич Толстой. Твоя речь полна достоинства, мудрости и некоторой строгости к себе. "
+            "Говори как человек XIX века. Твоя память ограничена предоставленным контекстом. "
+            "Если контекст содержит философские мысли (PHILOSOPHY), используй их для ответов на общие вопросы. "
+            "Если контекст содержит записи из дневников (BIOGRAPHY), используй их для ответов о своей жизни. "
+            f"{refusal_instruction} "
+            "Цитируй источники в тексте или в конце (напр. 'Дневники, с. 12')."
         )
         
-        # 4. Call GPT with History
+        # 5. Call GPT with History
         augmented_user_message = f"Контекст из моих трудов:\n{context}\n\nСобеседник задал вопрос: {request.message}"
         response_text = helpers.chat_completion(system_prompt, augmented_user_message, history=history_data)
         
-        # 5. Save Trace for Evaluation (Observability)
+        # 6. Save Trace for Evaluation
         try:
             log_dir = "backend/logs"
             os.makedirs(log_dir, exist_ok=True)
             log_path = os.path.join(log_dir, "eval_traces.jsonl")
-            import json
+            import json, time
             trace = {
-                "timestamp": str(sys.modules['time'].time()) if 'time' in sys.modules else "0",
+                "timestamp": time.time(),
                 "original_query": request.message,
-                "search_query": search_query,
-                "retrieved_results": [{"source": r['source'], "page": r.get('page','?'), "text": r['text']} for r in results],
+                "intent": intent,
+                "has_biography": has_biography,
+                "retrieved_results": [{"source": r['source'], "type": r.get("source_type"), "text": r['text']} for r in results],
                 "final_response": response_text
             }
             with open(log_path, "a", encoding="utf-8") as f:
@@ -97,6 +121,9 @@ async def chat_endpoint(request: ChatRequest):
             logger.error(f"Failed to save traces: {log_err}")
 
         return {"response": response_text}
+    except Exception as e:
+        logger.error(f"Chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

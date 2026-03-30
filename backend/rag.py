@@ -93,9 +93,19 @@ class SimpleRAG:
                 
             # Initialize BM25 only if we have words
             if len(self.chunks) > 0:
-                logger.info("Initializing BM25 index...")
-                corpus_lemmas = [c.get("lemmas", self.preprocess_text(c["text"])) for c in self.chunks]
+                logger.info(f"Initializing BM25 index for {len(self.chunks)} chunks...")
+                start_time = time.time()
+                corpus_lemmas = []
+                for i, c in enumerate(self.chunks):
+                    lemmas = c.get("lemmas")
+                    if lemmas is None:
+                        lemmas = self.preprocess_text(c["text"])
+                    corpus_lemmas.append(lemmas)
+                    if i % 1000 == 0 and i > 0:
+                        logger.info(f"Processed {i}/{len(self.chunks)} chunks for BM25...")
+                
                 self.bm25 = BM25Okapi(corpus_lemmas)
+                logger.info(f"BM25 index initialized in {time.time() - start_time:.2f}s")
             else:
                 self.bm25 = None
         return
@@ -145,10 +155,17 @@ class SimpleRAG:
             }, f, ensure_ascii=False)
 
     def search(self, query: str, k=5, rerank_top=50):
+        # Source classification mapping
+        source_types = {
+            "diaries.txt": "BIOGRAPHY",
+            "letters.txt": "BIOGRAPHY",
+            "on_land.txt": "PHILOSOPHY"
+        }
+
         # 1. Vector similarity search (Semantic)
         query_emb = self.helper.get_query_embedding(query)
         if query_emb is None: return []
-        # Phase 1: Heavyweight Retrieval (Approximate matching)
+        
         if len(self.embeddings) == 0:
             logger.warning("No embeddings loaded. Skipping vector search.")
             similarities = np.zeros(len(self.chunks))
@@ -167,30 +184,32 @@ class SimpleRAG:
             bm25_rank_idx = []
 
         # 3. Reciprocal Rank Fusion (RRF)
-        # score = sum(1 / (rank + k))
         rrf_scores = {}
-        rrf_k = 60 # Constant for RRF
+        rrf_k = 60
         
-        # Add vector results to RRF
         for rank, idx in enumerate(vector_rank_idx):
             rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (rank + rrf_k)
-            
-        # Add BM25 results to RRF
         for rank, idx in enumerate(bm25_rank_idx):
             rrf_scores[idx] = rrf_scores.get(idx, 0) + 1.0 / (rank + rrf_k)
             
-        # Sort by RRF score
         sorted_rrf_idx = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)[:rerank_top]
         candidates = [self.chunks[i] for i in sorted_rrf_idx]
         
-        # Phase 2: Reranking with CrossEncoder (Accurate)
+        # Phase 2: Reranking
+        final_results = []
         if self.reranker and len(candidates) > 0:
             pairs = [[query, c['text']] for c in candidates]
             scores = self.reranker.predict(pairs)
             reranked_idx = np.argsort(scores)[::-1]
-            return [candidates[i] for i in reranked_idx[:k]]
-        
-        return candidates[:k]
+            final_results = [candidates[i] for i in reranked_idx[:k]]
+        else:
+            final_results = candidates[:k]
+
+        # Add Source-Type labels
+        for res in final_results:
+            res["source_type"] = source_types.get(res["source"], "GENERAL")
+            
+        return final_results
 
 if __name__ == "__main__":
     rag = SimpleRAG()
