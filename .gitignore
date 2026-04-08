@@ -3,19 +3,30 @@ node_modules/
 dist/
 .npm/
 
-# Backend & RAG
+# Python & Backend
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.python-version
+backend/__pycache__/
 backend/index.json
 backend/logs/
 backend/tracing/
 backend/eval_traces.jsonl
-backend/__pycache__/
-venv/
-.env
-.python-version
-__pycache__/
-*.pyc
 
-# Data & Temp (Large datasets and scratchpads)
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Data & Temp
 Data/
 tmp/
 .gemini/
@@ -23,8 +34,10 @@ brain/
 artifacts/
 *.log
 
-# System
+# IDE & System
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
