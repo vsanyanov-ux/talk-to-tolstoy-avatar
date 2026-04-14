@@ -26,7 +26,7 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/chat', {
+      const response = await fetch('http://localhost:8001/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -54,7 +54,7 @@ function App() {
       
       <h1>Лев Николаевич Толстой</h1>
       <p style={{ fontStyle: 'italic', marginBottom: '1.5rem', opacity: 0.8 }}>
-        Чат-бот на основе дневников и писем (Yandex GPT RAG)
+        Чат-бот на основе дневников и писем (Mistral Large через прокси)
       </p>
 
       <div className="chat-box">

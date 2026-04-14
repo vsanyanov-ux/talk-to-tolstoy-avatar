@@ -115,6 +115,44 @@ class YandexGPTHelper:
             return condensed
         return user_text
 
+    def grade_documents(self, query: str, documents: list):
+        """Grades a list of documents for relevance to the user query."""
+        if not documents:
+            return []
+            
+        system_prompt = (
+            "Ты — эксперт по анализу текстов. Твоя задача — оценить, содержит ли данный фрагмент текста "
+            "полезную информацию для ответа на вопрос пользователя. "
+            "Ответь строго 'YES', если фрагмент полезен, и 'NO', если нет. Не давай никаких пояснений."
+        )
+        
+        results = []
+        for doc in documents:
+            user_message = f"ВОПРОС: {query}\n\nФРАГМЕНТ ТЕКСТА: {doc}\n\nПолезен ли этот текст?"
+            
+            headers = {
+                "Authorization": f"Api-Key {self.api_key}",
+                "x-folder-id": self.folder_id
+            }
+            body = {
+                "modelUri": f"gpt://{self.folder_id}/yandexgpt/latest",
+                "completionOptions": {"stream": False, "temperature": 0.1, "maxTokens": 10},
+                "messages": [
+                    {"role": "system", "text": system_prompt},
+                    {"role": "user", "text": user_message}
+                ]
+            }
+            try:
+                response = requests.post(self.gpt_url, headers=headers, json=body)
+                if response.status_code == 200:
+                    text = response.json()["result"]["alternatives"][0]["message"]["text"].strip().upper()
+                    results.append(True if "YES" in text else False)
+                else:
+                    results.append(True) # Fallback to keeping it
+            except:
+                results.append(True)
+        return results
+
     def evaluate_response(self, query: str, context: str, answer: str):
         """Uses LLM-as-a-Judge to evaluate the quality of a RAG interaction."""
         system_prompt = (
