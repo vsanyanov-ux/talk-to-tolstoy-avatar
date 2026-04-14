@@ -10,7 +10,7 @@
 
 В версии 2.0 мы перешли от линейного поиска к циклическому агентскому процессу с использованием **LangGraph**. Это позволяет системе критически оценивать информацию перед ответом.
 
-`mermaid
+```mermaid
 graph TD
     A[Пользователь] --> B(Condense Query)
     B --> C{История есть?}
@@ -24,7 +24,7 @@ graph TD
     H --> I[Tolstoy Persona]
     I --> J[Сноски и Цитаты]
     J --> A
-`
+```
 
 ---
 
@@ -61,22 +61,22 @@ graph TD
 ## ⚙️ Установка и запуск
 
 1. **Клонирование**:
-   `ash
+   ```bash
    git clone https://github.com/vsanyanov-ux/talk-to-tolstoy-avatar.git
-   `
+   ```
 2. **Окружение**:
-   Создайте .env файл на основе примера и добавьте API ключи (Mistral/LiteLLM, Langfuse).
+   Создайте `.env` файл на основе примера и добавьте API ключи (Mistral/LiteLLM, Langfuse).
 3. **Индексация**:
-   `ash
+   ```bash
    python scripts/rebuild_index_safe_persist.py
-   `
+   ```
 4. **Запуск**:
-   `ash
+   ```bash
    # Backend
    python backend/server.py
    # Frontend
    cd frontend && npm install && npm run dev
-   `
+   ```
 
 ---
 
